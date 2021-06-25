@@ -1,0 +1,49 @@
+version: '3.9'
+services:
+  reverse-proxy:
+    image: traefik:v2.3.4
+    command:
+      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=common"
+      - "--entrypoints.web.address=:80"
+#      - "--entrypoints.websecure.address=:443"
+      # SSL configuration
+#      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge=true"
+#      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge.entrypoint=web"
+#      - "--certificatesresolvers.letsencryptresolver.acme.email=user@domaine.com"
+#      - "--certificatesresolvers.letsencryptresolver.acme.storage=/letsencrypt/acme.json"
+      # Global HTTP -> HTTPS
+#      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+#      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Enable the Traefik dashboard
+      - "--api.dashboard=true"
+    ports:
+      - 80:80
+#      - 443:443
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - common
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        # Expose the Traefik dashboard
+        - "traefik.enable=true"
+        - "traefik.http.routers.traefik.service=api@internal"
+        - "traefik.http.services.traefik.loadbalancer.server.port=888" # A port number required by Docker Swarm but not being used in fact
+        - "traefik.http.routers.traefik.rule=Host(`traefik.learnintouch.com`)"
+        - "traefik.http.routers.traefik.entrypoints=web"
+#        - "traefik.http.routers.traefik.entrypoints=websecure"
+#        - "traefik.http.routers.traefik.tls.certresolver=letsencryptresolver"
+        # Basic HTTP authentication to secure the dashboard access
+        - "traefik.http.routers.traefik.middlewares=traefik-auth"
+        - "traefik.http.middlewares.traefik-auth.basicauth.users=stephane:$$apr1$$m72sBfSg$$7.NRvy75AZXAMtH3C2YTz/"
+networks:
+  common:
+    name: common
+    driver: overlay
